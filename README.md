@@ -1,103 +1,92 @@
-Chroma Hybrid RAG Chatbot (README Instructions)
-This project demonstrates how to build a hybrid Retrieval-Augmented Generation (RAG) chatbot using LangChain, Chroma, and OpenAI models.
-It combines dense embeddings (vector similarity) with BM25 keyword search to improve document retrieval quality.
+# Retrieval-Augmented Chatbot (LangChain + Chroma + BM25) 📚🤖
 
-1. Project Setup
-Create a project folder and place your text documents inside a subfolder named docs/.
+## What is this
 
-Create a Python virtual environment and install required dependencies:
+This project builds a Retrieval-Augmented Generation (RAG) chatbot over a custom document collection.  
+It lets you load `.txt` documents (placed in a `docs/` folder), embed them into a vector store using Chroma, and then use combined semantic + keyword retrieval (hybrid of embedding-based and keyword-based search) to answer user queries via a Large-Language Model (LLM).  
 
-text
-pip install langchain langchain_community langchain_chroma langchain_openai python-dotenv
-Create a .env file in the project root and add your OpenAI API key:
+In short — you get a chatbot that answers questions *based on your own documents*.
 
-text
-OPENAI_API_KEY=your_openai_api_key_here
-2. How the Script Works
-Step 1 — Load Environment Variables
-The script loads the .env file to access the OPENAI_API_KEY.
-If the key is missing, it raises an error and stops execution.
+## Repository Structure
 
-Step 2 — Load Text Documents
-All .txt files in the docs/ folder are loaded using DirectoryLoader and TextLoader.
-If no documents are found, the script raises an error.
+```
+/docs/                   ← Folder containing your .txt documents  
+chroma_db/              ← Persisted Chroma vector-store data (local DB)  
+hybride_search.py       ← Main script: handles chat interface + retrieval + answering  
+ingestion_pipeline.py   ← Script to load, split, embed and store documents  
+requirements.txt        ← Python dependencies  
+.env                     ← Environment variables (e.g. API key) — NOT to commit  
+venv/                    ← Virtual environment folder — ignored  
+.gitignore              ← Specifies files/folders to ignore (venv, .env, chroma_db, etc.)  
+```
 
-Step 3 — Split Documents (First Section)
-Large text files are split into smaller overlapping chunks using CharacterTextSplitter
-(chunk size = 1000 characters, overlap = 200). This makes them easier to embed for retrieval.
+## Prerequisites & Setup
 
-Step 4 — Generate Embeddings and Build Chroma Store
-Embeddings are created using the OpenAI text-embedding-3-small model via OpenAIEmbeddings.
-These embeddings are stored in a Chroma vector database at the folder chroma_db/ under a chosen collection_name.
-If the folder doesn’t exist, Chroma creates it automatically.
+1. Python 3.10+ (or compatible)  
+2. Create & activate a virtual environment  
+   ```bash
+   python -m venv venv
+   # On Windows
+   venv\Scripts\activate
+   # On Linux / macOS
+   source venv/bin/activate
+   ```  
+3. Install dependencies  
+   ```bash
+   pip install -r requirements.txt
+   ```  
+4. Create a `.env` file in the project root and set your API key:  
+   ```
+   OPENAI_API_KEY=your_openai_api_key_here
+   ```  
+5. Add your `.txt` documents into the `docs/` folder.
 
-Step 5 — Verify Stored Chunks
-After storing, the script reconnects to the same Chroma database using the same collection_name.
-It runs a sample test query (e.g., “Google”) using similarity search to verify retrieval.
+## How to Use
 
-Step 6 — Create Dual Retrievers
-The chatbot section sets up two different retrieval systems:
+### 1. Build / Ingest documents  
+Run:  
+```bash
+python ingestion_pipeline.py
+```  
+This will:  
+- Load all `.txt` files from `docs/`  
+- Split them into chunks  
+- Embed chunks and store them in the `chroma_db/` vector database  
 
-Vector Retriever (semantic search) — based on embeddings stored in Chroma.
+### 2. Start Chat / Ask Questions  
+Run:  
+```bash
+python hybride_search.py
+```  
+Then you can ask questions via CLI. The system will retrieve relevant document chunks (hybrid retrieval), send them to the LLM, and print the answer — grounded in your documents.
 
-BM25 Retriever (keyword-based search) — built directly from the text documents.
+## What it does (Features)
 
-These are combined using EnsembleRetriever with equal weights (0.5, 0.5) to form a Hybrid Retriever.
+- Semantic vector-based retrieval (embeddings) for conceptual similarity  
+- Keyword-based retrieval (BM25) for lexical matching  
+- Hybrid retrieval combining both — improves retrieval recall and accuracy  
+- Document chunking — handles large documents efficiently  
+- Easy ingestion: just `.txt` files, no need for fine-tuning  
+- LLM-backed QA on your document knowledge base  
 
-Step 7 — Define the Chat Model
-A ChatOpenAI model (gpt-4o) is created to answer user queries based on retrieved document context.
-This model powers the actual Q&A responses.
+## Limitations & What to Keep in Mind
 
-Step 8 — Implement Query Rewriting (Context Awareness)
-If previous chat history exists, a helper prompt asks the model to rewrite the new query as a standalone question.
-This ensures clarity and relevance in multi-turn conversations.
+- Currently supports only `.txt` documents  
+- If many documents / chunks are retrieved, prompt size may be large — watch out for LLM token limits  
+- You must manage/update `docs/` and rerun ingestion if you add/modify documents  
+- Don’t commit / share `.env` (contains API key), `venv/`, or `chroma_db/` — they are in `.gitignore`
 
-Step 9 — Retrieve and Prepare Document Context
-When the user asks a question:
+## Possible Improvements / Future Work
 
-The hybrid retriever finds the top relevant chunks (k=15 for BM25, k=4 for vector).
+- Support for other document formats (PDF, DOCX, HTML)  
+- Add a web or GUI interface instead of CLI (e.g. via a web server or web framework)  
+- Automate incremental ingestion (auto-detect new docs and embed)  
+- Add configuration options: chunk size, retriever weights, embedding model, etc.  
+- Add tests, error handling, better prompt design, and caching  
 
-Long chunks are truncated to a safe character limit (max_chars = 1000).
+## Author & License
 
-These chunks are combined into a formatted prompt that includes the question and the supporting text snippets.
+- Author: *Vishal Kumar*  
+---
 
-Step 10 — Generate Response
-The chat model (gpt-4o) receives a prompt like:
-
-"Based on the following documents, answer the question..."
-
-It then crafts an answer, or replies with “I don’t have enough information” if necessary context is missing.
-
-Step 11 — Maintain Chat History
-The interaction history is stored in a chat_history list that contains alternating HumanMessage and AIMessage objects.
-This ensures that future questions can use previous context for rewriting and coherence.
-
-Step 12 — Run the Chat Interface
-The start_chat() function provides a simple command-line chat loop.
-
-Type a question to query the hybrid system.
-
-Type exit or quit to end the conversation.
-
-3. Summary of Components
-Component	Role
-DirectoryLoader, TextLoader	Load and read .txt documents
-CharacterTextSplitter	Split documents into overlapping chunks
-OpenAIEmbeddings	Convert chunks into dense vector embeddings
-Chroma	Store and query document embeddings
-BM25Retriever	Perform keyword-based retrieval
-EnsembleRetriever	Combine semantic + keyword retrieval
-ChatOpenAI	Generate context-aware answers
-dotenv	Securely manage API keys
-4. How to Run
-Place your documents in the docs/ folder.
-
-Run the script:
-
-text
-python chroma_demo.py
-Wait for embeddings to generate and Chroma store to persist.
-
-When the CLI prompt appears, type your question.
-
-Review generated answers and retrieved document sources printed in the console.
+**Thanks** for checking out the project — feel free to fork, extend, or give feedback!  
